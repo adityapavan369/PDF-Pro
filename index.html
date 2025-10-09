@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Pro - Convert & Edit PDFs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-file-pdf"></i>
+                <h1>PDF Pro</h1>
+            </div>
+            <p class="subtitle">Convert any file to PDF and edit with professional tools</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- File Upload Section -->
+            <section class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h3>Drop files here or click to browse</h3>
+                    <p>Supports: PDF, Word, Excel, PowerPoint, Images, Text files</p>
+                    <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.xlsx,.pptx,.txt,.png,.jpg,.jpeg,.gif">
+                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-plus"></i> Choose Files
+                    </button>
+                </div>
+                
+                <div class="file-list" id="fileList"></div>
+            </section>
+
+            <!-- PDF Viewer and Editor Section -->
+            <section class="editor-section" id="editorSection" style="display: none;">
+                <div class="editor-toolbar">
+                    <div class="toolbar-group">
+                        <button class="tool-btn" id="addTextBtn" title="Add Text">
+                            <i class="fas fa-font"></i>
+                        </button>
+                        <button class="tool-btn" id="highlightBtn" title="Highlight">
+                            <i class="fas fa-highlighter"></i>
+                        </button>
+                        <button class="tool-btn" id="addNoteBtn" title="Add Note">
+                            <i class="fas fa-sticky-note"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <button class="tool-btn" id="rotateBtn" title="Rotate Page">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                        <button class="tool-btn" id="cropBtn" title="Crop Page">
+                            <i class="fas fa-crop"></i>
+                        </button>
+                        <button class="tool-btn" id="deletePageBtn" title="Delete Page">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <button class="tool-btn" id="mergeBtn" title="Merge PDFs">
+                            <i class="fas fa-object-group"></i>
+                        </button>
+                        <button class="tool-btn" id="splitBtn" title="Split PDF">
+                            <i class="fas fa-cut"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <button class="download-btn" id="downloadBtn">
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                    </div>
+                </div>
+
+                <div class="editor-content">
+                    <div class="page-navigation">
+                        <button id="prevPageBtn"><i class="fas fa-chevron-left"></i></button>
+                        <span id="pageInfo">Page 1 of 1</span>
+                        <button id="nextPageBtn"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                    
+                    <div class="pdf-viewer" id="pdfViewer">
+                        <div class="page-container" id="pageContainer">
+                            <!-- PDF pages will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Modals -->
+        <div class="modal" id="textModal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h3>Add Text</h3>
+                <textarea id="textInput" placeholder="Enter text to add..."></textarea>
+                <div class="modal-controls">
+                    <label>Font Size: <input type="number" id="fontSize" value="12" min="8" max="72"></label>
+                    <button id="addTextConfirm" class="btn-primary">Add Text</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="noteModal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h3>Add Note</h3>
+                <textarea id="noteInput" placeholder="Enter note content..."></textarea>
+                <button id="addNoteConfirm" class="btn-primary">Add Note</button>
+            </div>
+        </div>
+
+        <div class="modal" id="mergeModal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h3>Merge PDFs</h3>
+                <div id="mergeFileList"></div>
+                <button id="mergeConfirm" class="btn-primary">Merge Selected</button>
+            </div>
+        </div>
+
+        <div class="modal" id="splitModal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h3>Split PDF</h3>
+                <p>Enter page ranges (e.g., 1-3, 5-7):</p>
+                <input type="text" id="pageRanges" placeholder="1-3, 5-7">
+                <button id="splitConfirm" class="btn-primary">Split PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Processing...</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
+
