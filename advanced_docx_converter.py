@@ -1,143 +1,117 @@
-"""
+""" 
 Advanced DOCX to PDF Converter with Page Fitting Capabilities
 This module provides enhanced conversion functionality to achieve single-page PDF output
-when possible, while preserving formatting quality.
+when possible, while preserving formatting quality. This improved version is more robust
+and includes tool availability checks, safer python-docx manipulations, better temp file
+handling, and multiple fallbacks to increase success rates across environments.
 """
-
 import subprocess
 import os
 import tempfile
 import shutil
+import logging
 from pathlib import Path
+from typing import Optional
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class AdvancedDocxConverter:
     """Advanced DOCX to PDF converter with multiple strategies for optimal output."""
     
-    def __init__(self):
-        self.temp_dir = None
+    def __init__(self, timeout: int = 120):
+        self.timeout = timeout
     
-    def convert_with_margin_reduction(self, docx_path, output_path):
-        """
-        Convert DOCX to PDF with reduced margins to fit more content on one page.
-        Uses LibreOffice with custom page style settings.
-        """
+    # Helper utilities
+    def _is_tool_available(self, name: str) -> bool:
+        """Return True if `name` is found on PATH."""
+        from shutil import which
+        return which(name) is not None
+    
+    def _run_command(self, cmd, timeout: Optional[int] = None):
+        """Run a subprocess command and return CompletedProcess. Raises on timeout."""
         try:
-            # Create a temporary directory for processing
-            self.temp_dir = tempfile.mkdtemp()
-            temp_docx = os.path.join(self.temp_dir, "temp_reduced_margins.docx")
-            
-            # Copy the original file to temp location
-            shutil.copy2(docx_path, temp_docx)
-            
-            # Use LibreOffice with specific export options to reduce margins
+            to = timeout or self.timeout
+            logger.debug("Running command: %s", " ".join(cmd))
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=to)
+        except subprocess.TimeoutExpired as e:
+            logger.warning("Command timed out: %s", " ".join(cmd))
+            raise
+    
+    def _ensure_parent_dir(self, path: str):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Conversion strategies
+    def convert_with_libreoffice(self, docx_path: str, output_path: str) -> bool:
+        """Convert DOCX to PDF using LibreOffice in headless mode."""
+        if not self._is_tool_available("libreoffice"):
+            logger.warning("LibreOffice not available")
+            return False
+        try:
+            self._ensure_parent_dir(output_path)
             cmd = [
-                'libreoffice',
-                '--headless',
-                '--convert-to', 'pdf',
-                '--outdir', os.path.dirname(output_path),
-                temp_docx
+                "libreoffice", "--headless", "--convert-to", "pdf",
+                "--outdir", str(Path(output_path).parent), docx_path
             ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
+            result = self._run_command(cmd)
             if result.returncode == 0:
-                # LibreOffice creates the PDF with the same base name as the input file
-                base_name = os.path.splitext(os.path.basename(temp_docx))[0]
-                temp_pdf_path = os.path.join(os.path.dirname(output_path), f"{base_name}.pdf")
-                
-                # Rename to the expected output path
-                if os.path.exists(temp_pdf_path):
-                    os.rename(temp_pdf_path, output_path)
+                expected = Path(output_path).parent / (Path(docx_path).stem + ".pdf")
+                if expected.exists():
+                    if expected != Path(output_path):
+                        shutil.move(str(expected), output_path)
+                    logger.info("LibreOffice conversion succeeded")
                     return True
-                else:
-                    print(f"LibreOffice conversion succeeded but PDF not found at {temp_pdf_path}")
-                    return False
-            else:
-                print(f"LibreOffice conversion failed: {result.stderr}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            print("LibreOffice conversion timed out")
+            logger.info("LibreOffice conversion failed: %s", result.stderr)
             return False
         except Exception as e:
-            print(f"Error in margin reduction conversion: {e}")
+            logger.exception("Error with LibreOffice: %s", e)
             return False
-        finally:
-            # Clean up temporary directory
-            if self.temp_dir and os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir)
     
-    def convert_with_scaling(self, docx_path, output_path):
-        """
-        Convert DOCX to PDF with content scaling to fit on one page.
-        Uses unoconv with specific scaling options.
-        """
+    def convert_with_unoconv(self, docx_path: str, output_path: str) -> bool:
+        """Convert DOCX to PDF using unoconv."""
+        if not self._is_tool_available("unoconv"):
+            logger.warning("unoconv not available")
+            return False
         try:
-            # Try using unoconv with specific options
-            cmd = [
-                'unoconv',
-                '-f', 'pdf',
-                '-o', output_path,
-                docx_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
-            if result.returncode == 0:
+            self._ensure_parent_dir(output_path)
+            cmd = ["unoconv", "-f", "pdf", "-o", output_path, docx_path]
+            result = self._run_command(cmd)
+            if result.returncode == 0 and Path(output_path).exists():
+                logger.info("unoconv conversion succeeded")
                 return True
-            else:
-                print(f"unoconv conversion failed: {result.stderr}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            print("unoconv conversion timed out")
+            logger.info("unoconv conversion failed: %s", result.stderr)
             return False
         except Exception as e:
-            print(f"Error in scaling conversion: {e}")
+            logger.exception("Error with unoconv: %s", e)
             return False
     
-    def convert_with_python_docx_manipulation(self, docx_path, output_path):
-        """
-        Convert DOCX to PDF by first manipulating the document structure
-        to reduce content size and then converting.
-        """
+    def convert_with_python_docx_manipulation(self, docx_path: str, output_path: str) -> bool:
+        """Modify DOCX structure (margins, fonts, spacing) before conversion."""
         try:
             from docx import Document
             from docx.shared import Inches, Pt
-            from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-            
-            # Load the document
+        except ImportError:
+            logger.warning("python-docx not available")
+            return False
+        try:
             doc = Document(docx_path)
-            
-            # Create a temporary directory for processing
-            self.temp_dir = tempfile.mkdtemp()
-            temp_docx = os.path.join(self.temp_dir, "temp_optimized.docx")
-            
-            # Modify document properties for better single-page fitting
-            
-            # 1. Reduce margins significantly
+            # Reduce margins
             for section in doc.sections:
                 section.top_margin = Inches(0.3)
                 section.bottom_margin = Inches(0.3)
                 section.left_margin = Inches(0.5)
                 section.right_margin = Inches(0.5)
-            
-            # 2. Reduce font sizes slightly and line spacing
+            # Reduce font sizes and paragraph spacing
             for paragraph in doc.paragraphs:
                 for run in paragraph.runs:
                     if run.font.size:
-                        # Reduce font size by 10%
                         current_size = run.font.size.pt
                         run.font.size = Pt(max(8, current_size * 0.9))
-                
-                # Reduce paragraph spacing
-                paragraph_format = paragraph.paragraph_format
-                paragraph_format.space_before = Pt(0)
-                paragraph_format.space_after = Pt(2)
-                paragraph_format.line_spacing = 1.0
-            
-            # 3. Optimize table formatting if any
+                pf = paragraph.paragraph_format
+                pf.space_before = Pt(0)
+                pf.space_after = Pt(2)
+                pf.line_spacing = 1.0
+            # Optimize tables
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
@@ -146,122 +120,89 @@ class AdvancedDocxConverter:
                                 if run.font.size:
                                     current_size = run.font.size.pt
                                     run.font.size = Pt(max(7, current_size * 0.85))
-            
-            # Save the modified document
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+                temp_docx = tmp.name
             doc.save(temp_docx)
-            
-            # Convert the optimized document to PDF
-            cmd = [
-                'libreoffice',
-                '--headless',
-                '--convert-to', 'pdf',
-                '--outdir', os.path.dirname(output_path),
-                temp_docx
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
-            if result.returncode == 0:
-                # LibreOffice creates the PDF with the same base name as the input file
-                base_name = os.path.splitext(os.path.basename(temp_docx))[0]
-                temp_pdf_path = os.path.join(os.path.dirname(output_path), f"{base_name}.pdf")
-                
-                # Rename to the expected output path
-                if os.path.exists(temp_pdf_path):
-                    os.rename(temp_pdf_path, output_path)
-                    return True
-                else:
-                    print(f"LibreOffice conversion succeeded but PDF not found at {temp_pdf_path}")
-                    return False
-            else:
-                print(f"LibreOffice conversion failed: {result.stderr}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            print("LibreOffice conversion timed out")
-            return False
+            success = self.convert_with_libreoffice(temp_docx, output_path)
+            try:
+                os.remove(temp_docx)
+            except Exception:
+                pass
+            if success:
+                logger.info("python-docx manipulation + conversion succeeded")
+            return success
         except Exception as e:
-            print(f"Error in python-docx manipulation conversion: {e}")
+            logger.exception("Error with python-docx manipulation: %s", e)
             return False
-        finally:
-            # Clean up temporary directory
-            if self.temp_dir and os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir)
     
-    def get_pdf_page_count(self, pdf_path):
-        """Get the number of pages in a PDF file."""
+    def get_pdf_page_count(self, pdf_path: str) -> Optional[int]:
+        """Return the number of pages in a PDF, or None on error."""
         try:
             import pypdf
-            with open(pdf_path, 'rb') as f:
+            with open(pdf_path, "rb") as f:
                 reader = pypdf.PdfReader(f)
                 return len(reader.pages)
         except Exception as e:
-            print(f"Error getting PDF page count: {e}")
+            logger.warning("Could not determine PDF page count: %s", e)
             return None
     
-    def convert_docx_to_pdf_optimized(self, docx_path, output_path):
-        """
-        Main conversion method that tries multiple strategies and selects the best result.
-        Priority: Single page > Fewer pages > Original conversion
-        """
+    def convert_docx_to_pdf_optimized(self, docx_path: str, output_path: str) -> bool:
+        """Try multiple strategies and pick the one with fewest pages (ideally 1)."""
         strategies = [
-            ("Python DOCX Manipulation", self.convert_with_python_docx_manipulation),
-            ("Margin Reduction", self.convert_with_margin_reduction),
-            ("Scaling with unoconv", self.convert_with_scaling),
+            ("python-docx manipulation", self.convert_with_python_docx_manipulation),
+            ("unoconv", self.convert_with_unoconv),
+            ("libreoffice", self.convert_with_libreoffice),
         ]
-        
         best_result = None
-        best_page_count = float('inf')
-        
-        for strategy_name, strategy_func in strategies:
-            try:
-                # Create a temporary output path for this strategy
-                temp_output = f"{output_path}.{strategy_name.lower().replace(' ', '_')}.tmp"
-                
-                print(f"Trying strategy: {strategy_name}")
-                success = strategy_func(docx_path, temp_output)
-                
-                if success and os.path.exists(temp_output):
+        best_page_count = float("inf")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for name, func in strategies:
+                try:
+                    safe_name = name.replace(" ", "_")
+                    temp_output = os.path.join(tmpdir, f"{safe_name}.pdf")
+                    logger.info("Trying strategy: %s", name)
+                    success = func(docx_path, temp_output)
+                    if not success:
+                        logger.info("Strategy '%s' returned False", name)
+                        continue
+                    if not Path(temp_output).exists():
+                        logger.info("Strategy '%s' reported success but file not present", name)
+                        continue
                     page_count = self.get_pdf_page_count(temp_output)
-                    print(f"Strategy '{strategy_name}' resulted in {page_count} pages")
-                    
-                    if page_count and page_count < best_page_count:
-                        # This strategy produced fewer pages
-                        if best_result and os.path.exists(best_result):
-                            os.remove(best_result)  # Clean up previous best result
-                        best_result = temp_output
+                    logger.info("Strategy '%s' produced %s pages", name, page_count)
+                    if page_count is None:
+                        # treat as failure
+                        continue
+                    if page_count < best_page_count:
+                        # remove previous best
+                        if best_result and Path(best_result).exists():
+                            try:
+                                os.remove(best_result)
+                            except Exception:
+                                pass
+                        # copy current to keep it
+                        kept = os.path.join(tmpdir, f"best_{safe_name}.pdf")
+                        shutil.copy2(temp_output, kept)
+                        best_result = kept
                         best_page_count = page_count
-                        
-                        # If we achieved single page, we can stop here
                         if page_count == 1:
-                            print(f"Achieved single-page PDF with strategy: {strategy_name}")
+                            logger.info("Achieved single-page PDF with strategy: %s", name)
                             break
                     else:
-                        # This strategy didn't improve, clean up
-                        os.remove(temp_output)
-                else:
-                    print(f"Strategy '{strategy_name}' failed")
-                    
-            except Exception as e:
-                print(f"Error with strategy '{strategy_name}': {e}")
-                continue
-        
-        # Use the best result or fall back to original conversion
-        if best_result and os.path.exists(best_result):
-            shutil.move(best_result, output_path)
-            print(f"Best conversion achieved {best_page_count} pages")
-            return True
-        else:
-            print("All optimization strategies failed, falling back to original conversion")
-            # Fall back to the original LibreOffice conversion
-            return self.convert_with_margin_reduction(docx_path, output_path)
+                        logger.info("Strategy '%s' did not improve page count", name)
+                except Exception as e:
+                    logger.exception("Error while running strategy %s: %s", name, e)
+                    continue
+            if best_result and Path(best_result).exists():
+                shutil.move(best_result, output_path)
+                logger.info("Best conversion achieved %s pages", best_page_count)
+                return True
+        # As a final fallback, try a plain libreoffice conversion directly to output_path
+        logger.info("All optimization strategies failed or produced no improvement; trying LibreOffice fallback")
+        return self.convert_with_libreoffice(docx_path, output_path)
 
-
-def convert_docx_to_pdf_advanced(docx_path, output_path):
-    """
-    Public function to convert DOCX to PDF with advanced optimization.
-    This is the main entry point for the enhanced conversion.
-    """
+def convert_docx_to_pdf_advanced(docx_path: str, output_path: str) -> bool:
+    """Public function to convert DOCX to PDF with advanced optimization.
+    This is the main entry point for the enhanced conversion."""
     converter = AdvancedDocxConverter()
     return converter.convert_docx_to_pdf_optimized(docx_path, output_path)
-
