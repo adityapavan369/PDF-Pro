@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Convert Files - PDF-Pro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Convert to PDF</h1>
+    <p>Convert images and DOCX files to PDF format</p>
+</div>
+
+<div class="upload-section">
+    <form id="convertForm" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">Select File (PNG, JPG, DOCX)</label>
+            <input type="file" id="file" name="file" accept=".png,.jpg,.jpeg,.docx" required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Convert to PDF</button>
+    </form>
+    
+    <div id="status" class="status-message"></div>
+    <div id="progress" class="progress-bar" style="display: none;">
+        <div class="progress-fill"></div>
+    </div>
+</div>
+
+<div class="info-box">
+    <h3>Supported Formats</h3>
+    <ul>
+        <li><strong>Images:</strong> PNG, JPG, JPEG</li>
+        <li><strong>Documents:</strong> DOCX (Microsoft Word)</li>
+    </ul>
+    <p><strong>Note:</strong> Maximum file size is 16MB</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('convertForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const statusDiv = document.getElementById('status');
+    const progressDiv = document.getElementById('progress');
+    
+    statusDiv.textContent = 'Converting...';
+    statusDiv.className = 'status-message info';
+    progressDiv.style.display = 'block';
+    
+    fetch('{{ url_for("convert") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Conversion failed');
+            });
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'converted.pdf';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        statusDiv.textContent = 'Conversion successful! Download started.';
+        statusDiv.className = 'status-message success';
+        progressDiv.style.display = 'none';
+        
+        // Reset form
+        document.getElementById('convertForm').reset();
+    })
+    .catch(error => {
+        statusDiv.textContent = 'Error: ' + error.message;
+        statusDiv.className = 'status-message error';
+        progressDiv.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}
