@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Edit PDFs - PDF-Pro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Edit PDFs</h1>
+    <p>Rotate pages, add watermarks, and more</p>
+</div>
+
+<div class="upload-section">
+    <form id="editForm" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">Select PDF File</label>
+            <input type="file" id="file" name="file" accept=".pdf" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="operation">Edit Operation</label>
+            <select id="operation" name="operation">
+                <option value="rotate">Rotate Pages</option>
+                <option value="watermark">Add Watermark</option>
+            </select>
+        </div>
+        
+        <div class="form-group" id="rotationGroup">
+            <label for="rotation">Rotation Angle</label>
+            <select id="rotation" name="rotation">
+                <option value="90">90° Clockwise</option>
+                <option value="180">180°</option>
+                <option value="270">270° Clockwise (90° Counter-clockwise)</option>
+            </select>
+        </div>
+        
+        <div class="form-group" id="watermarkGroup" style="display: none;">
+            <label for="watermark_text">Watermark Text</label>
+            <input type="text" id="watermark_text" name="watermark_text" value="CONFIDENTIAL">
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Apply Edit</button>
+    </form>
+    
+    <div id="status" class="status-message"></div>
+    <div id="progress" class="progress-bar" style="display: none;">
+        <div class="progress-fill"></div>
+    </div>
+</div>
+
+<div class="info-box">
+    <h3>Edit Options</h3>
+    <ul>
+        <li><strong>Rotate:</strong> Rotate all pages by 90, 180, or 270 degrees</li>
+        <li><strong>Watermark:</strong> Add a text watermark to all pages</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const operationSelect = document.getElementById('operation');
+const rotationGroup = document.getElementById('rotationGroup');
+const watermarkGroup = document.getElementById('watermarkGroup');
+
+operationSelect.addEventListener('change', function() {
+    if (this.value === 'rotate') {
+        rotationGroup.style.display = 'block';
+        watermarkGroup.style.display = 'none';
+    } else if (this.value === 'watermark') {
+        rotationGroup.style.display = 'none';
+        watermarkGroup.style.display = 'block';
+    }
+});
+
+document.getElementById('editForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const statusDiv = document.getElementById('status');
+    const progressDiv = document.getElementById('progress');
+    
+    statusDiv.textContent = 'Processing PDF...';
+    statusDiv.className = 'status-message info';
+    progressDiv.style.display = 'block';
+    
+    fetch('{{ url_for("edit") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Edit failed');
+            });
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'edited.pdf';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        statusDiv.textContent = 'Edit successful! Download started.';
+        statusDiv.className = 'status-message success';
+        progressDiv.style.display = 'none';
+        
+        // Reset form
+        document.getElementById('editForm').reset();
+    })
+    .catch(error => {
+        statusDiv.textContent = 'Error: ' + error.message;
+        statusDiv.className = 'status-message error';
+        progressDiv.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}
