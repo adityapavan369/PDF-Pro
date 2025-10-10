@@ -282,6 +282,31 @@ def admin_logs():
     
     return render_template('admin_logs.html', logs=logs)
 
+@app.route('/api/info')
+def api_info():
+    """API endpoint to get application information"""
+    from datetime import datetime, timezone
+    
+    # Get current UTC timestamp in the required format
+    utc_timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Detect environment
+    environment = os.environ.get('FLASK_ENV', 'production')
+    
+    # Return application info
+    return jsonify({
+        'status': 'online',
+        'timestamp': utc_timestamp,
+        'environment': environment,
+        'version': Config.VERSION,
+        'features': [
+            'convert',
+            'merge',
+            'split',
+            'edit'
+        ]
+    })
+
 @app.route('/download/<filename>')
 def download(filename):
     filepath = os.path.join(Config.OUTPUT_FOLDER, filename)
