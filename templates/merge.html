@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Merge PDFs - PDF-Pro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Merge PDFs</h1>
+    <p>Combine multiple PDF files into one document</p>
+</div>
+
+<div class="upload-section">
+    <form id="mergeForm" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="files">Select PDF Files (minimum 2)</label>
+            <input type="file" id="files" name="files" accept=".pdf" multiple required>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Merge PDFs</button>
+    </form>
+    
+    <div id="status" class="status-message"></div>
+    <div id="progress" class="progress-bar" style="display: none;">
+        <div class="progress-fill"></div>
+    </div>
+</div>
+
+<div class="info-box">
+    <h3>How to Merge</h3>
+    <ol>
+        <li>Select at least 2 PDF files</li>
+        <li>Files will be merged in the order selected</li>
+        <li>Click "Merge PDFs" to combine them</li>
+        <li>Download the merged PDF file</li>
+    </ol>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('mergeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const statusDiv = document.getElementById('status');
+    const progressDiv = document.getElementById('progress');
+    const filesInput = document.getElementById('files');
+    
+    if (filesInput.files.length < 2) {
+        statusDiv.textContent = 'Please select at least 2 PDF files';
+        statusDiv.className = 'status-message error';
+        return;
+    }
+    
+    statusDiv.textContent = 'Merging PDFs...';
+    statusDiv.className = 'status-message info';
+    progressDiv.style.display = 'block';
+    
+    fetch('{{ url_for("merge") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Merge failed');
+            });
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'merged.pdf';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        statusDiv.textContent = 'Merge successful! Download started.';
+        statusDiv.className = 'status-message success';
+        progressDiv.style.display = 'none';
+        
+        // Reset form
+        document.getElementById('mergeForm').reset();
+    })
+    .catch(error => {
+        statusDiv.textContent = 'Error: ' + error.message;
+        statusDiv.className = 'status-message error';
+        progressDiv.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}

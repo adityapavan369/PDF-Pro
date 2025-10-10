@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Conversion Logs - PDF-Pro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Conversion Logs</h1>
+  <p>Recent conversions and details</p>
+</div>
+
+<div class="info-box">
+  {% if logs %}
+    <table style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr style="text-align:left; border-bottom:1px solid #ddd;">
+          <th>Timestamp (UTC)</th>
+          <th>Engine</th>
+          <th>Input</th>
+          <th>Output</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in logs %}
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td>{{ row.timestamp }}</td>
+          <td>{{ row.engine }}</td>
+          <td>{{ row.input }}</td>
+          <td>{{ row.output }}</td>
+          <td>{{ row.duration }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('admin_rerun') }}" style="display:inline;">
+              <input type="hidden" name="input" value="{{ row.input }}">
+              <button type="submit" class="btn">Re-run</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p style="margin-top:1rem;"><a class="btn" href="{{ url_for('download_logs') }}">Download Full Log</a></p>
+  {% else %}
+    <p>No logs found.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
