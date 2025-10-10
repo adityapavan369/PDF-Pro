@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block title %}Split PDFs - PDF-Pro{% endblock %}
 
 {% block content %}
@@ -10,6 +9,8 @@
 
 <div class="upload-section">
     <form id="splitForm" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
         <div class="form-group">
             <label for="file">Select PDF File</label>
             <input type="file" id="file" name="file" accept=".pdf" required>
@@ -20,12 +21,19 @@
             <select id="split_type" name="split_type">
                 <option value="single">Into individual pages</option>
                 <option value="pages">By number of pages</option>
+                <option value="custom">By custom page ranges</option>
             </select>
         </div>
         
         <div class="form-group" id="pagesPerFileGroup" style="display: none;">
             <label for="pages_per_file">Pages per file</label>
             <input type="number" id="pages_per_file" name="pages_per_file" value="1" min="1">
+        </div>
+        
+        <div class="form-group" id="customRangesGroup" style="display: none;">
+            <label for="custom_ranges">Custom Page Ranges</label>
+            <input type="text" id="custom_ranges" name="custom_ranges" placeholder="e.g., 1-3,5,7-9">
+            <small class="form-help">Enter page ranges separated by commas. Use hyphens for ranges (e.g., 1-3,5,7-9)</small>
         </div>
         
         <button type="submit" class="btn btn-primary">Split PDF</button>
@@ -35,77 +43,178 @@
     <div id="progress" class="progress-bar" style="display: none;">
         <div class="progress-fill"></div>
     </div>
+    
+    <div id="results" class="results-section" style="display: none;">
+        <h3>Split Files</h3>
+        <div id="fileList" class="file-list"></div>
+    </div>
 </div>
 
-<div class="info-box">
-    <h3>Split Options</h3>
-    <ul>
-        <li><strong>Individual pages:</strong> Split each page into a separate PDF</li>
-        <li><strong>By number:</strong> Split into files with specified pages per file</li>
-    </ul>
-    <p><strong>Note:</strong> For demo purposes, only the first split file is returned. In production, all files would be zipped.</p>
-</div>
-{% endblock %}
-
-{% block scripts %}
 <script>
-const splitTypeSelect = document.getElementById('split_type');
-const pagesPerFileGroup = document.getElementById('pagesPerFileGroup');
-
-splitTypeSelect.addEventListener('change', function() {
-    if (this.value === 'pages') {
-        pagesPerFileGroup.style.display = 'block';
-    } else {
-        pagesPerFileGroup.style.display = 'none';
-    }
-});
-
-document.getElementById('splitForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const formData = new FormData(this);
-    const statusDiv = document.getElementById('status');
-    const progressDiv = document.getElementById('progress');
-    
-    statusDiv.textContent = 'Splitting PDF...';
-    statusDiv.className = 'status-message info';
-    progressDiv.style.display = 'block';
-    
-    fetch('{{ url_for("split") }}', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(data => {
-                throw new Error(data.error || 'Split failed');
+    document.addEventListener('DOMContentLoaded', function() {
+        const splitForm = document.getElementById('splitForm');
+        const splitType = document.getElementById('split_type');
+        const pagesPerFileGroup = document.getElementById('pagesPerFileGroup');
+        const customRangesGroup = document.getElementById('customRangesGroup');
+        const statusDiv = document.getElementById('status');
+        const progressDiv = document.getElementById('progress');
+        const resultsDiv = document.getElementById('results');
+        const fileList = document.getElementById('fileList');
+        
+        // Toggle visibility of input groups based on split type
+        splitType.addEventListener('change', function() {
+            pagesPerFileGroup.style.display = 'none';
+            customRangesGroup.style.display = 'none';
+            
+            if (this.value === 'pages') {
+                pagesPerFileGroup.style.display = 'block';
+            } else if (this.value === 'custom') {
+                customRangesGroup.style.display = 'block';
+            }
+        });
+        
+        // Handle form submission
+        splitForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            // Show progress
+            statusDiv.textContent = 'Processing...';
+            statusDiv.className = 'status-message info';
+            progressDiv.style.display = 'block';
+            resultsDiv.style.display = 'none';
+            
+            fetch('/split', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Split failed');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                progressDiv.style.display = 'none';
+                statusDiv.textContent = 'PDF split successfully!';
+                statusDiv.className = 'status-message success';
+                
+                // Display result files
+                if (data.files && data.files.length > 0) {
+                    resultsDiv.style.display = 'block';
+                    fileList.innerHTML = '';
+                    
+                    data.files.forEach(file => {
+                        const fileItem = document.createElement('div');
+                        fileItem.className = 'file-item';
+                        fileItem.innerHTML = `
+                            <span class="file-name">${file}</span>
+                            <a href="/download/${file}" class="btn btn-sm btn-download">Download</a>
+                        `;
+                        fileList.appendChild(fileItem);
+                    });
+                }
+            })
+            .catch(error => {
+                progressDiv.style.display = 'none';
+                statusDiv.textContent = error.message;
+                statusDiv.className = 'status-message error';
             });
-        }
-        return response.blob();
-    })
-    .then(blob => {
-        // Create download link
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'split_part.pdf';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        
-        statusDiv.textContent = 'Split successful! Download started.';
-        statusDiv.className = 'status-message success';
-        progressDiv.style.display = 'none';
-        
-        // Reset form
-        document.getElementById('splitForm').reset();
-    })
-    .catch(error => {
-        statusDiv.textContent = 'Error: ' + error.message;
-        statusDiv.className = 'status-message error';
-        progressDiv.style.display = 'none';
+        });
     });
-});
 </script>
+
+<style>
+    .form-help {
+        display: block;
+        margin-top: 5px;
+        font-size: 0.875em;
+        color: #6c757d;
+    }
+    
+    .results-section {
+        margin-top: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+    
+    .file-list {
+        margin-top: 15px;
+    }
+    
+    .file-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        margin-bottom: 10px;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+    }
+    
+    .file-name {
+        font-weight: 500;
+    }
+    
+    .btn-sm {
+        padding: 5px 15px;
+        font-size: 0.875em;
+    }
+    
+    .btn-download {
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .btn-download:hover {
+        background-color: #218838;
+    }
+    
+    .status-message {
+        padding: 10px 15px;
+        margin-top: 15px;
+        border-radius: 4px;
+    }
+    
+    .status-message.info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .status-message.success {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .status-message.error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 4px;
+        background-color: #e9ecef;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 15px;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background-color: #007bff;
+        animation: progress 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes progress {
+        0% { width: 0%; }
+        50% { width: 100%; }
+        100% { width: 0%; }
+    }
+</style>
 {% endblock %}
