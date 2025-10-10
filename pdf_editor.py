@@ -34,88 +34,67 @@ class PDFEditor:
     def delete_page(self, page_num):
         """Delete a specific page"""
         try:
-            self.pdf_document.delete_page(page_num)
+            self.pdf_document.delete_pages(page_num)
             return True
         except Exception as e:
             print(f"Error deleting page: {e}")
             return False
     
-    def add_text(self, page_num, text, x, y, font_size=12):
-        """Add text to a specific page at given coordinates"""
+    def add_text(self, page_num, text, position, fontsize=12, color=(0, 0, 0)):
+        """Add text to a specific page, matching detected font if possible"""
         try:
             page = self.pdf_document[page_num]
-            point = fitz.Point(x, y)
-            page.insert_text(point, text, fontsize=font_size)
+            
+            # Detect existing fonts on the page
+            detected_font = None
+            try:
+                text_instances = page.get_text("dict")["blocks"]
+                for block in text_instances:
+                    if "lines" in block:
+                        for line in block["lines"]:
+                            for span in line["spans"]:
+                                if "font" in span:
+                                    detected_font = span["font"]
+                                    break
+                            if detected_font:
+                                break
+                    if detected_font:
+                        break
+            except:
+                pass
+            
+            # Use detected font or fallback to default
+            font = detected_font if detected_font else "helv"
+            
+            # Insert text with detected or default font
+            page.insert_text(
+                position,
+                text,
+                fontsize=fontsize,
+                color=color,
+                fontname=font
+            )
             return True
         except Exception as e:
             print(f"Error adding text: {e}")
             return False
     
-    def add_highlight(self, page_num, x1, y1, x2, y2):
-        """Add highlight annotation to a rectangular area"""
+    def add_image(self, page_num, image_path, position, width=None, height=None):
+        """Add an image to a specific page"""
         try:
             page = self.pdf_document[page_num]
-            rect = fitz.Rect(x1, y1, x2, y2)
-            highlight = page.add_highlight_annot(rect)
-            highlight.set_colors(stroke=[1, 1, 0])  # Yellow highlight
-            highlight.update()
-            return True
-        except Exception as e:
-            print(f"Error adding highlight: {e}")
-            return False
-    
-    def add_note(self, page_num, x, y, content):
-        """Add a text note annotation"""
-        try:
-            page = self.pdf_document[page_num]
-            point = fitz.Point(x, y)
-            note = page.add_text_annot(point, content)
-            note.set_info(content=content)
-            note.update()
-            return True
-        except Exception as e:
-            print(f"Error adding note: {e}")
-            return False
-    
-    def crop_page(self, page_num, x1, y1, x2, y2):
-        """Crop a page to the specified rectangle"""
-        try:
-            page = self.pdf_document[page_num]
-            rect = fitz.Rect(x1, y1, x2, y2)
-            page.set_cropbox(rect)
-            return True
-        except Exception as e:
-            print(f"Error cropping page: {e}")
-            return False
-    
-    def insert_image(self, page_num, image_path, x, y, width, height):
-        """Insert an image into the PDF"""
-        try:
-            page = self.pdf_document[page_num]
-            rect = fitz.Rect(x, y, x + width, y + height)
+            rect = fitz.Rect(position[0], position[1], 
+                           position[0] + (width or 100), 
+                           position[1] + (height or 100))
             page.insert_image(rect, filename=image_path)
             return True
         except Exception as e:
-            print(f"Error inserting image: {e}")
+            print(f"Error adding image: {e}")
             return False
     
-    def get_page_as_image(self, page_num, zoom=1.0):
-        """Convert a page to an image for display"""
+    def save(self, output_path):
+        """Save the edited PDF"""
         try:
-            page = self.pdf_document[page_num]
-            mat = fitz.Matrix(zoom, zoom)
-            pix = page.get_pixmap(matrix=mat)
-            img_data = pix.tobytes("png")
-            return img_data
-        except Exception as e:
-            print(f"Error converting page to image: {e}")
-            return None
-    
-    def save(self, output_path=None):
-        """Save the modified PDF"""
-        try:
-            if output_path is None:
-                output_path = self.pdf_path
             self.pdf_document.save(output_path)
             return True
         except Exception as e:
@@ -126,48 +105,38 @@ class PDFEditor:
         """Close the PDF document"""
         self.pdf_document.close()
 
-class PDFMerger:
-    @staticmethod
-    def merge_pdfs(pdf_paths, output_path):
-        """Merge multiple PDFs into one"""
-        try:
-            merger = pypdf.PdfWriter()
-            
-            for pdf_path in pdf_paths:
-                with open(pdf_path, 'rb') as f:
-                    reader = pypdf.PdfReader(f)
-                    for page in reader.pages:
-                        merger.add_page(page)
-            
-            with open(output_path, 'wb') as f:
-                merger.write(f)
-            
-            return True
-        except Exception as e:
-            print(f"Error merging PDFs: {e}")
-            return False
+def parse_page_ranges(range_string):
+    """Parse custom page ranges for splitting PDFs.
     
-    @staticmethod
-    def split_pdf(pdf_path, output_dir, page_ranges):
-        """Split PDF into multiple files based on page ranges"""
-        try:
-            with open(pdf_path, 'rb') as f:
-                reader = pypdf.PdfReader(f)
-                
-                for i, (start, end) in enumerate(page_ranges):
-                    writer = pypdf.PdfWriter()
-                    
-                    for page_num in range(start, min(end + 1, len(reader.pages))):
-                        writer.add_page(reader.pages[page_num])
-                    
-                    output_filename = f"split_{i+1}.pdf"
-                    output_path = os.path.join(output_dir, output_filename)
-                    
-                    with open(output_path, 'wb') as output_file:
-                        writer.write(output_file)
-            
-            return True
-        except Exception as e:
-            print(f"Error splitting PDF: {e}")
-            return False
-
+    Args:
+        range_string: String with page ranges like '1-3,5,7-9'
+    
+    Returns:
+        List of tuples with (start, end) page numbers (0-indexed)
+        Returns None if invalid format
+    """
+    if not range_string or not range_string.strip():
+        return None
+    
+    try:
+        ranges = []
+        parts = range_string.split(',')
+        
+        for part in parts:
+            part = part.strip()
+            if '-' in part:
+                start, end = part.split('-')
+                start = int(start.strip()) - 1  # Convert to 0-indexed
+                end = int(end.strip()) - 1
+                if start < 0 or end < 0 or start > end:
+                    return None
+                ranges.append((start, end))
+            else:
+                page = int(part.strip()) - 1  # Convert to 0-indexed
+                if page < 0:
+                    return None
+                ranges.append((page, page))
+        
+        return ranges
+    except (ValueError, AttributeError):
+        return None
