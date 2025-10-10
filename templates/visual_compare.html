@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Visual Compare - PDF-Pro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Visual PDF Compare</h1>
+  <p>Compare two PDFs visually page-by-page (requires server support).</p>
+</div>
+
+<div class="upload-section">
+  <form id="compareForm" method="POST" enctype="multipart/form-data">
+    <div class="form-group">
+      <label for="file1">PDF 1</label>
+      <input type="file" id="file1" name="file1" accept=".pdf" required>
+    </div>
+    <div class="form-group">
+      <label for="file2">PDF 2</label>
+      <input type="file" id="file2" name="file2" accept=".pdf" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Compare</button>
+  </form>
+
+  <div id="compareResult" class="info-box" style="margin-top:1rem; display:none;"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('compareForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const fd = new FormData(this);
+  const res = await fetch('{{ url_for("admin_visual_compare") }}', { method: 'POST', body: fd, headers: { 'Authorization': '' } });
+  const html = await res.text();
+  // Replace page with returned HTML (simple approach)
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const content = doc.querySelector('.upload-section');
+  if (content) {
+    document.querySelector('.upload-section').innerHTML = content.innerHTML;
+  }
+});
+</script>
+{% endblock %}

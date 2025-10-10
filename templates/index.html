@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}PDF-Pro - Home{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>Welcome to PDF-Pro</h1>
+    <p class="subtitle">A full-featured PDF toolkit for converting, editing, merging, and splitting PDF files</p>
+</div>
+
+<div class="features">
+    <div class="feature-card">
+        <h2>Convert</h2>
+        <p>Convert images and DOCX files to PDF format</p>
+        <a href="{{ url_for('convert') }}" class="btn">Convert Files</a>
+    </div>
+    
+    <div class="feature-card">
+        <h2>Merge</h2>
+        <p>Combine multiple PDF files into one document</p>
+        <a href="{{ url_for('merge') }}" class="btn">Merge PDFs</a>
+    </div>
+    
+    <div class="feature-card">
+        <h2>Split</h2>
+        <p>Split PDF files into multiple documents</p>
+        <a href="{{ url_for('split') }}" class="btn">Split PDFs</a>
+    </div>
+    
+    <div class="feature-card">
+        <h2>Edit</h2>
+        <p>Rotate pages, add watermarks, and more</p>
+        <a href="{{ url_for('edit') }}" class="btn">Edit PDFs</a>
+    </div>
+</div>
+
+<div class="info-section">
+    <h2>Features</h2>
+    <ul>
+        <li>Convert images (PNG, JPG) to PDF</li>
+        <li>Convert DOCX documents to PDF</li>
+        <li>Merge multiple PDF files</li>
+        <li>Split PDFs into separate pages or ranges</li>
+        <li>Rotate PDF pages</li>
+        <li>Add watermarks to PDFs</li>
+        <li>External API integration for advanced features</li>
+    </ul>
+</div>
+{% endblock %}
