@@ -42,9 +42,11 @@ def inject_csrf_token():
 def csrf_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.form.get('csrf_token')
-        if not _validate_csrf_token(token):
-            return jsonify({'error': 'CSRF token validation failed'}), 403
+        # Only validate CSRF token for state-changing methods (POST, PUT, PATCH, DELETE)
+        if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+            token = request.form.get('csrf_token')
+            if not _validate_csrf_token(token):
+                return jsonify({'error': 'CSRF token validation failed'}), 403
         return f(*args, **kwargs)
     return decorated_function
 
@@ -281,6 +283,31 @@ def admin_logs():
             logs = f.readlines()[-100:]  # Get last 100 lines
     
     return render_template('admin_logs.html', logs=logs)
+
+@app.route('/api/info')
+def api_info():
+    """API endpoint to get application information"""
+    from datetime import datetime, timezone
+    
+    # Get current UTC timestamp in the required format
+    utc_timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Detect environment
+    environment = os.environ.get('FLASK_ENV', 'production')
+    
+    # Return application info
+    return jsonify({
+        'status': 'online',
+        'timestamp': utc_timestamp,
+        'environment': environment,
+        'version': Config.VERSION,
+        'features': [
+            'convert',
+            'merge',
+            'split',
+            'edit'
+        ]
+    })
 
 @app.route('/download/<filename>')
 def download(filename):
