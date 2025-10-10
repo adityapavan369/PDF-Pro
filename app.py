@@ -34,218 +34,211 @@ def _validate_csrf_token(token: str) -> bool:
         return False
     return token == session.get('_csrf_token')
 
-# Jinja helper to render a hidden CSRF field
-@app.context_processor
-def inject_csrf_token():
-    return dict(csrf_token=_generate_csrf_token)
-
-def csrf_required(f):
+def csrf_protect(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.form.get('csrf_token')
-        if not _validate_csrf_token(token):
-            return jsonify({'error': 'CSRF token validation failed'}), 403
+        if request.method == 'POST':
+            token = request.form.get('csrf_token')
+            if not _validate_csrf_token(token):
+                flash('Invalid CSRF token', 'error')
+                return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated_function
 
-# Admin authentication decorator
+app.jinja_env.globals['csrf_token'] = _generate_csrf_token
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('admin_logged_in'):
+            flash('Admin access required', 'error')
             return redirect(url_for('admin_login'))
         return f(*args, **kwargs)
     return decorated_function
+
+@app.context_processor
+def inject_user():
+    return dict(csrf_token=_generate_csrf_token())
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    """User login route"""
-    if request.method == 'POST':
-        # Handle login logic here (e.g., validate credentials)
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        # Placeholder for actual authentication
-        # In a real application, verify credentials against a database
-        if username and password:
-            session['user_logged_in'] = True
-            session['username'] = username
-            flash('Login successful!', 'success')
-            return redirect(url_for('index'))
-        else:
-            flash('Invalid credentials', 'error')
-    
-    return render_template('login.html')
-
-@app.route('/convert', methods=['GET', 'POST'])
-@csrf_required
+@app.route('/convert', methods=['POST'])
+@csrf_protect
 def convert():
-    if request.method == 'POST':
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400
+    
+    filename = secure_filename(file.filename)
+    filename = ensure_unique_filename(Config.UPLOAD_FOLDER, filename)
+    filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+    file.save(filepath)
+    
+    try:
         conversion_type = request.form.get('conversion_type')
-        files = request.files.getlist('files')
+        output_filename = None
         
-        if not files:
-            return jsonify({'error': 'No files provided'}), 400
+        if conversion_type == 'image_to_pdf':
+            output_filename = image_to_pdf(filepath, Config.OUTPUT_FOLDER)
+        elif conversion_type == 'docx_to_pdf':
+            output_filename = docx_to_pdf(filepath, Config.OUTPUT_FOLDER)
+        else:
+            return jsonify({'error': 'Invalid conversion type'}), 400
         
-        output_files = []
-        
-        try:
-            for file in files:
-                if not file or not allowed_file(file.filename, ['png', 'jpg', 'jpeg', 'docx']):
-                    continue
-                    
-                filename = secure_filename(file.filename)
-                input_path = os.path.join(Config.UPLOAD_FOLDER, filename)
-                file.save(input_path)
-                
-                # Generate output filename
-                output_filename = os.path.splitext(filename)[0] + '.pdf'
-                output_path = os.path.join(Config.OUTPUT_FOLDER, output_filename)
-                
-                # Perform conversion based on file type
-                if conversion_type == 'image_to_pdf':
-                    image_to_pdf(input_path, output_path)
-                elif conversion_type == 'docx_to_pdf':
-                    docx_to_pdf(input_path, output_path)
-                
-                output_files.append(output_filename)
-            
-            return jsonify({'files': output_files}), 200
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        if output_filename:
+            return jsonify({
+                'success': True,
+                'message': 'File converted successfully',
+                'download_url': url_for('download', filename=output_filename)
+            })
+        else:
+            return jsonify({'error': 'Conversion failed'}), 500
     
-    return render_template('convert.html')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
-@app.route('/merge', methods=['GET', 'POST'])
-@csrf_required
+@app.route('/merge', methods=['POST'])
+@csrf_protect
 def merge():
-    if request.method == 'POST':
-        files = request.files.getlist('files')
-        
-        if len(files) < 2:
-            return jsonify({'error': 'At least 2 PDFs required for merging'}), 400
-        
-        try:
-            pdf_paths = []
-            for file in files:
-                if not file or not allowed_file(file.filename, ['pdf']):
-                    continue
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
-                file.save(filepath)
-                pdf_paths.append(filepath)
-            
-            output_filename = f"merged_{uuid.uuid4().hex[:8]}.pdf"
-            output_path = os.path.join(Config.OUTPUT_FOLDER, output_filename)
-            
-            merge_pdfs(pdf_paths, output_path)
-            
-            return send_file(output_path, as_attachment=True)
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    if 'files' not in request.files:
+        return jsonify({'error': 'No files uploaded'}), 400
     
-    return render_template('merge.html')
+    files = request.files.getlist('files')
+    if len(files) < 2:
+        return jsonify({'error': 'At least 2 files required for merging'}), 400
+    
+    temp_files = []
+    try:
+        for file in files:
+            if file.filename == '':
+                continue
+            if not allowed_file(file.filename) or not file.filename.lower().endswith('.pdf'):
+                return jsonify({'error': 'All files must be PDFs'}), 400
+            
+            filename = secure_filename(file.filename)
+            filename = ensure_unique_filename(Config.UPLOAD_FOLDER, filename)
+            filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+            file.save(filepath)
+            temp_files.append(filepath)
+        
+        output_filename = merge_pdfs(temp_files, Config.OUTPUT_FOLDER)
+        
+        if output_filename:
+            return jsonify({
+                'success': True,
+                'message': 'PDFs merged successfully',
+                'download_url': url_for('download', filename=output_filename)
+            })
+        else:
+            return jsonify({'error': 'Merge failed'}), 500
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        for filepath in temp_files:
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
-@app.route('/split', methods=['GET', 'POST'])
-@csrf_required
+@app.route('/split', methods=['POST'])
+@csrf_protect
 def split():
-    if request.method == 'POST':
-        file = request.files.get('file')
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    
+    file = request.files['file']
+    if file.filename == '' or not file.filename.lower().endswith('.pdf'):
+        return jsonify({'error': 'Invalid PDF file'}), 400
+    
+    filename = secure_filename(file.filename)
+    filename = ensure_unique_filename(Config.UPLOAD_FOLDER, filename)
+    filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+    file.save(filepath)
+    
+    try:
         split_type = request.form.get('split_type')
         
-        if not file or not allowed_file(file.filename, ['pdf']):
-            return jsonify({'error': 'Invalid PDF file'}), 400
+        if split_type == 'single':
+            output_files = split_pdf_into_single_pages(filepath, Config.OUTPUT_FOLDER)
+        elif split_type == 'range':
+            page_range = request.form.get('page_range', '')
+            output_files = split_pdf_by_range(filepath, page_range, Config.OUTPUT_FOLDER)
+        else:
+            return jsonify({'error': 'Invalid split type'}), 400
         
-        try:
-            filename = secure_filename(file.filename)
-            input_path = os.path.join(Config.UPLOAD_FOLDER, filename)
-            file.save(input_path)
-            
-            output_files = []
-            
-            if split_type == 'single':
-                # Split into single pages
-                output_files = split_pdf_into_single_pages(input_path, Config.OUTPUT_FOLDER)
-            elif split_type == 'pages':
-                # Split by page numbers (expects comma-separated list)
-                pages = request.form.get('pages', '')
-                page_list = [int(p.strip()) for p in pages.split(',') if p.strip().isdigit()]
-                output_files = split_pdf_by_pages(input_path, page_list, Config.OUTPUT_FOLDER)
-            elif split_type == 'custom':
-                # Split by custom ranges using parse_page_ranges
-                custom_ranges = request.form.get('custom_ranges', '')
-                
-                if not custom_ranges:
-                    return jsonify({'error': 'Custom ranges not provided'}), 400
-                
-                # Parse the custom ranges
-                parsed_ranges = parse_page_ranges(custom_ranges)
-                
-                if parsed_ranges is None:
-                    return jsonify({'error': 'Invalid page range format. Use format like "1-3,5,7-9"'}), 400
-                
-                # Split using the parsed ranges
-                output_files = []
-                for i, (start, end) in enumerate(parsed_ranges):
-                    output_filename = f"{os.path.splitext(filename)[0]}_range_{i+1}.pdf"
-                    output_path = os.path.join(Config.OUTPUT_FOLDER, output_filename)
-                    # Use split_pdf_by_range to extract the pages
-                    split_pdf_by_range(input_path, start, end, output_path)
-                    output_files.append(output_filename)
-            else:
-                return jsonify({'error': 'Invalid split type'}), 400
-            
-            return jsonify({'files': output_files}), 200
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        if output_files:
+            return jsonify({
+                'success': True,
+                'message': 'PDF split successfully',
+                'files': [url_for('download', filename=f) for f in output_files]
+            })
+        else:
+            return jsonify({'error': 'Split failed'}), 500
     
-    return render_template('split.html')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
-@app.route('/edit', methods=['GET', 'POST'])
-@csrf_required
+@app.route('/edit', methods=['POST'])
+@csrf_protect
 def edit():
-    if request.method == 'POST':
-        file = request.files.get('file')
-        edit_type = request.form.get('edit_type')
-        
-        if not file or not allowed_file(file.filename, ['pdf']):
-            return jsonify({'error': 'Invalid PDF file'}), 400
-        
-        try:
-            filename = secure_filename(file.filename)
-            input_path = os.path.join(Config.UPLOAD_FOLDER, filename)
-            file.save(input_path)
-            
-            output_filename = f"edited_{uuid.uuid4().hex[:8]}.pdf"
-            output_path = os.path.join(Config.OUTPUT_FOLDER, output_filename)
-            
-            if edit_type == 'rotate':
-                angle = int(request.form.get('angle', 90))
-                page_num = int(request.form.get('page_num', 0))
-                rotate_pdf(input_path, output_path, page_num, angle)
-            elif edit_type == 'watermark':
-                watermark_text = request.form.get('watermark_text', 'WATERMARK')
-                add_watermark(input_path, output_path, watermark_text)
-            elif edit_type == 'extract':
-                pages = request.form.get('pages', '')
-                page_list = [int(p.strip()) for p in pages.split(',') if p.strip().isdigit()]
-                extract_pages(input_path, output_path, page_list)
-            elif edit_type == 'delete':
-                pages = request.form.get('pages', '')
-                page_list = [int(p.strip()) for p in pages.split(',') if p.strip().isdigit()]
-                delete_pages(input_path, output_path, page_list)
-            else:
-                return jsonify({'error': 'Invalid edit type'}), 400
-            
-            return send_file(output_path, as_attachment=True)
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
     
-    return render_template('edit.html')
+    file = request.files['file']
+    if file.filename == '' or not file.filename.lower().endswith('.pdf'):
+        return jsonify({'error': 'Invalid PDF file'}), 400
+    
+    filename = secure_filename(file.filename)
+    filename = ensure_unique_filename(Config.UPLOAD_FOLDER, filename)
+    filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+    file.save(filepath)
+    
+    try:
+        edit_type = request.form.get('edit_type')
+        output_filename = None
+        
+        if edit_type == 'rotate':
+            angle = int(request.form.get('angle', 90))
+            output_filename = rotate_pdf(filepath, angle, Config.OUTPUT_FOLDER)
+        elif edit_type == 'watermark':
+            watermark_text = request.form.get('watermark_text', 'CONFIDENTIAL')
+            output_filename = add_watermark(filepath, watermark_text, Config.OUTPUT_FOLDER)
+        elif edit_type == 'extract':
+            page_range = request.form.get('page_range', '')
+            output_filename = extract_pages(filepath, page_range, Config.OUTPUT_FOLDER)
+        elif edit_type == 'delete':
+            page_range = request.form.get('page_range', '')
+            output_filename = delete_pages(filepath, page_range, Config.OUTPUT_FOLDER)
+        else:
+            return jsonify({'error': 'Invalid edit type'}), 400
+        
+        if output_filename:
+            return jsonify({
+                'success': True,
+                'message': 'PDF edited successfully',
+                'download_url': url_for('download', filename=output_filename)
+            })
+        else:
+            return jsonify({'error': 'Edit failed'}), 500
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
@@ -253,7 +246,6 @@ def admin_login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        # Check admin credentials (in production, use secure storage)
         if username == Config.ADMIN_USERNAME and password == Config.ADMIN_PASSWORD:
             session['admin_logged_in'] = True
             flash('Admin login successful!', 'success')
@@ -288,6 +280,10 @@ def download(filename):
     if os.path.exists(filepath):
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
+
+@app.route('/api/info')
+def api_info():
+    return jsonify({'status': 'online'}), 200
 
 @app.errorhandler(404)
 def not_found(error):
