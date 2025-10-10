@@ -77,15 +77,24 @@ The application will be available at `http://localhost:5000`
 The application also provides API endpoints:
 
 - `GET /api/info` - Get API status and available features
+  - Returns JSON with:
+    - `status`: Application status (always "online")
+    - `timestamp`: Current UTC timestamp (format: YYYY-MM-DD HH:MM:SS)
+    - `environment`: Current environment (from FLASK_ENV)
+    - `version`: Application version
+    - `features`: List of available features
 
 ## Configuration
 
 Configuration options can be set in `config.py` or through environment variables:
 
 - `SECRET_KEY`: Flask secret key for session management
+- `FLASK_ENV`: Environment name (e.g., 'development', 'production')
+- `FLASK_DEBUG`: Enable debug mode (set to 'True' to enable)
 - `MAX_CONTENT_LENGTH`: Maximum file upload size (default: 16MB)
 - `UPLOAD_FOLDER`: Directory for uploaded files
 - `OUTPUT_FOLDER`: Directory for processed files
+- `LOG_FOLDER`: Directory for application logs
 - `PDF_API_KEY`: API key for external PDF processing service (optional)
 - `PDF_API_URL`: URL for external PDF processing service (optional)
 

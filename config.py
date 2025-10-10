@@ -11,7 +11,14 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
     OUTPUT_FOLDER = os.path.join(os.path.dirname(__file__), 'outputs')
+    LOG_FOLDER = os.path.join(os.path.dirname(__file__), 'logs')
     ALLOWED_EXTENSIONS = {'pdf', 'docx', 'png', 'jpg', 'jpeg'}
+    
+    # Application version
+    VERSION = '1.0.0'
+    
+    # Debug mode
+    DEBUG = os.environ.get('FLASK_DEBUG', 'False') == 'True'
     
     # External API configuration (example: PDF processing API)
     API_KEY = os.environ.get('PDF_API_KEY', '')
@@ -31,3 +38,4 @@ class Config:
         """Initialize application directories"""
         os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
         os.makedirs(Config.OUTPUT_FOLDER, exist_ok=True)
+        os.makedirs(Config.LOG_FOLDER, exist_ok=True)
