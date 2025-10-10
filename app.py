@@ -282,6 +282,15 @@ def admin_logs():
     
     return render_template('admin_logs.html', logs=logs)
 
+@app.route('/api/info')
+def api_info():
+    return jsonify({
+        'status': 'online',
+        'version': '1.0.0',
+        'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+        'environment': os.getenv('FLASK_ENV', 'production')
+    }), 200
+
 @app.route('/download/<filename>')
 def download(filename):
     filepath = os.path.join(Config.OUTPUT_FOLDER, filename)
