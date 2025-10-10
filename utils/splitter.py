@@ -3,6 +3,69 @@ import os
 from PyPDF2 import PdfReader, PdfWriter
 
 
+def split_pdf_by_page_numbers(input_path, output_path, page_numbers):
+    """Split a PDF by extracting specific pages
+    
+    Args:
+        input_path: Path to input PDF file
+        output_path: Path to save the output PDF file
+        page_numbers: List of page numbers to extract (1-based indexing)
+        
+    Returns:
+        str: Path to output PDF file
+    """
+    try:
+        reader = PdfReader(input_path)
+        writer = PdfWriter()
+        
+        # Convert 1-based page numbers to 0-based indices
+        for page_num in sorted(page_numbers):
+            if 1 <= page_num <= len(reader.pages):
+                writer.add_page(reader.pages[page_num - 1])
+        
+        with open(output_path, 'wb') as output_file:
+            writer.write(output_file)
+        
+        return output_path
+    except Exception as e:
+        raise Exception(f"Error splitting PDF: {str(e)}")
+
+def split_pdf_into_multiple(input_path, output_dir, page_ranges):
+    """Split a PDF into multiple files based on page ranges
+    
+    Args:
+        input_path: Path to input PDF file
+        output_dir: Directory to save the output PDF files
+        page_ranges: List of tuples containing (start_page, end_page) for each split
+        
+    Returns:
+        list: List of paths to split PDF files
+    """
+    try:
+        reader = PdfReader(input_path)
+        output_files = []
+        
+        os.makedirs(output_dir, exist_ok=True)
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        
+        for idx, (start, end) in enumerate(page_ranges, 1):
+            if 1 <= start <= len(reader.pages) and 1 <= end <= len(reader.pages):
+                writer = PdfWriter()
+                
+                # Convert 1-based page numbers to 0-based indices
+                for page_num in range(start - 1, end):
+                    writer.add_page(reader.pages[page_num])
+                
+                output_path = os.path.join(output_dir, f"{base_name}_split{idx}.pdf")
+                with open(output_path, 'wb') as output_file:
+                    writer.write(output_file)
+                
+                output_files.append(output_path)
+        
+        return output_files
+    except Exception as e:
+        raise Exception(f"Error splitting PDF: {str(e)}")
+
 def split_pdf_by_pages(input_path, output_dir, pages_per_file=1):
     """Split a PDF into multiple files
     

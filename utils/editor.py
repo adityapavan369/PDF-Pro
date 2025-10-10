@@ -180,6 +180,9 @@ def edit_pdf_text(input_path, output_path, page_number, old_text, new_text):
                                         page.add_redact_annot(inst)
                                         page.apply_redactions()
                                         
+                                        # Use safe default color (black)
+                                        default_color = (0, 0, 0)
+                                        
                                         # Insert new text with matched font
                                         try:
                                             # Try to use exact font
@@ -189,7 +192,7 @@ def edit_pdf_text(input_path, output_path, page_number, old_text, new_text):
                                                 fontfile=font_path,  # Use matched system font
                                                 fontname=font_details['name'],
                                                 fontsize=font_details['size'],
-                                                color=font_details['color']
+                                                color=default_color
                                             )
                                         except Exception:
                                             # Fallback to standard font while preserving other properties
@@ -198,7 +201,7 @@ def edit_pdf_text(input_path, output_path, page_number, old_text, new_text):
                                                 new_text,
                                                 fontname=font_details['name'],
                                                 fontsize=font_details['size'],
-                                                color=font_details['color']
+                                                color=default_color
                                             )
         
         # Save with optimization for better quality
