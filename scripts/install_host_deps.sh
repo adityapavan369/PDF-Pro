@@ -5,10 +5,12 @@ set -euo pipefail
 # Intended to be run on an Ubuntu host (or CI runner) with sudo privileges.
 
 echo "Installing apt packages (LibreOffice)..."
-sudo apt-get update -y
+sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-  libreoffice-core libreoffice-writer libreoffice-common libreoffice-draw libreoffice-pdfimport \
+  libreoffice-common libreoffice-core-nogui libreoffice-writer libreoffice-draw \
   fonts-dejavu-core poppler-utils
+sudo apt-get clean
+sudo rm -rf /var/lib/apt/lists/*
 
 echo "Installing Python packages..."
 python3 -m pip install --upgrade pip
