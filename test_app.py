@@ -141,6 +141,9 @@ def test_flask_routes():
         assert response.status_code == 200, "API info failed"
         data = response.get_json()
         assert data['status'] == 'online', "API status incorrect"
+        assert 'version' in data, "API version missing"
+        assert 'timestamp' in data, "API timestamp missing"
+        assert 'environment' in data, "API environment missing"
         
     print("✓ Flask routes test passed")
 

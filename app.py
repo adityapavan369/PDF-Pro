@@ -289,6 +289,16 @@ def download(filename):
         return send_file(filepath, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
 
+@app.route('/api/info')
+def api_info():
+    """API health check and information endpoint"""
+    return jsonify({
+        'status': 'online',
+        'version': Config.VERSION,
+        'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'environment': Config.ENVIRONMENT
+    }), 200
+
 @app.errorhandler(404)
 def not_found(error):
     return render_template('404.html'), 404
