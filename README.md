@@ -76,7 +76,23 @@ The application will be available at `http://localhost:5000`
 
 The application also provides API endpoints:
 
-- `GET /api/info` - Get API status and available features
+- `GET /api/info` - API health check and information endpoint
+  
+  Returns comprehensive API status information in JSON format:
+  ```json
+  {
+    "status": "online",
+    "version": "1.0.0",
+    "timestamp": "2025-10-10T16:37:27Z",
+    "environment": "production"
+  }
+  ```
+  
+  Response fields:
+  - `status`: Current API status (always "online" when accessible)
+  - `version`: API version number
+  - `timestamp`: Current server time in ISO 8601 UTC format
+  - `environment`: Deployment environment (e.g., "production", "development")
 
 ## Configuration
 
@@ -86,6 +102,9 @@ Configuration options can be set in `config.py` or through environment variables
 - `MAX_CONTENT_LENGTH`: Maximum file upload size (default: 16MB)
 - `UPLOAD_FOLDER`: Directory for uploaded files
 - `OUTPUT_FOLDER`: Directory for processed files
+- `APP_VERSION`: Application version number (default: "1.0.0")
+- `APP_ENVIRONMENT`: Deployment environment (default: "production")
+- `DEBUG`: Enable debug mode (default: "False")
 - `PDF_API_KEY`: API key for external PDF processing service (optional)
 - `PDF_API_URL`: URL for external PDF processing service (optional)
 
