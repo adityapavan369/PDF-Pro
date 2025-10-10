@@ -142,6 +142,26 @@ def test_flask_routes():
         data = response.get_json()
         assert data['status'] == 'online', "API status incorrect"
         
+        # Verify all required fields are present
+        assert 'timestamp' in data, "API info missing timestamp"
+        assert 'environment' in data, "API info missing environment"
+        assert 'version' in data, "API info missing version"
+        assert 'features' in data, "API info missing features"
+        
+        # Verify timestamp format (YYYY-MM-DD HH:MM:SS)
+        from datetime import datetime
+        try:
+            datetime.strptime(data['timestamp'], '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            raise AssertionError(f"Invalid timestamp format: {data['timestamp']}")
+        
+        # Verify version format
+        assert data['version'] == '1.0.0', "Incorrect version"
+        
+        # Verify features list
+        assert isinstance(data['features'], list), "Features should be a list"
+        assert len(data['features']) > 0, "Features list should not be empty"
+        
     print("✓ Flask routes test passed")
 
 
