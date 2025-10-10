@@ -17,12 +17,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install apt deps (LibreOffice)
+      - name: Install LibreOffice for PDF handling
         run: |
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            libreoffice-core libreoffice-writer libreoffice-common libreoffice-draw libreoffice-pdfimport \
-            fonts-dejavu-core poppler-utils
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-common libreoffice-core-nogui libreoffice-writer libreoffice-draw fonts-dejavu-core poppler-utils
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
 
       - name: Install Python deps
         run: |
