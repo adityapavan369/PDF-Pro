@@ -50,6 +50,17 @@ def csrf_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Admin authentication decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Simple admin check - in production, implement proper authentication
+        if not session.get('is_admin'):
+            flash('Admin access required', 'error')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 @app.route('/')
 def index():
     return render_template('index.html')
