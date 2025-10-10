@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Split PDFs - PDF-Pro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Split PDFs</h1>
+    <p>Split PDF files into multiple documents</p>
+</div>
+
+<div class="upload-section">
+    <form id="splitForm" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">Select PDF File</label>
+            <input type="file" id="file" name="file" accept=".pdf" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="split_type">Split Type</label>
+            <select id="split_type" name="split_type">
+                <option value="single">Into individual pages</option>
+                <option value="pages">By number of pages</option>
+            </select>
+        </div>
+        
+        <div class="form-group" id="pagesPerFileGroup" style="display: none;">
+            <label for="pages_per_file">Pages per file</label>
+            <input type="number" id="pages_per_file" name="pages_per_file" value="1" min="1">
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Split PDF</button>
+    </form>
+    
+    <div id="status" class="status-message"></div>
+    <div id="progress" class="progress-bar" style="display: none;">
+        <div class="progress-fill"></div>
+    </div>
+</div>
+
+<div class="info-box">
+    <h3>Split Options</h3>
+    <ul>
+        <li><strong>Individual pages:</strong> Split each page into a separate PDF</li>
+        <li><strong>By number:</strong> Split into files with specified pages per file</li>
+    </ul>
+    <p><strong>Note:</strong> For demo purposes, only the first split file is returned. In production, all files would be zipped.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const splitTypeSelect = document.getElementById('split_type');
+const pagesPerFileGroup = document.getElementById('pagesPerFileGroup');
+
+splitTypeSelect.addEventListener('change', function() {
+    if (this.value === 'pages') {
+        pagesPerFileGroup.style.display = 'block';
+    } else {
+        pagesPerFileGroup.style.display = 'none';
+    }
+});
+
+document.getElementById('splitForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const statusDiv = document.getElementById('status');
+    const progressDiv = document.getElementById('progress');
+    
+    statusDiv.textContent = 'Splitting PDF...';
+    statusDiv.className = 'status-message info';
+    progressDiv.style.display = 'block';
+    
+    fetch('{{ url_for("split") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Split failed');
+            });
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'split_part.pdf';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        statusDiv.textContent = 'Split successful! Download started.';
+        statusDiv.className = 'status-message success';
+        progressDiv.style.display = 'none';
+        
+        // Reset form
+        document.getElementById('splitForm').reset();
+    })
+    .catch(error => {
+        statusDiv.textContent = 'Error: ' + error.message;
+        statusDiv.className = 'status-message error';
+        progressDiv.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}
