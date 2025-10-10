@@ -122,19 +122,19 @@ def test_flask_routes():
         
         # Test convert page
         response = client.get('/convert')
-        assert response.status_code == 200, "Convert page failed"
+        assert response.status_code == 200, f"Convert page failed with status {response.status_code}: {response.data.decode()}"
         
         # Test merge page
         response = client.get('/merge')
-        assert response.status_code == 200, "Merge page failed"
+        assert response.status_code == 200, f"Merge page failed with status {response.status_code}: {response.data.decode()}"
         
         # Test split page
         response = client.get('/split')
-        assert response.status_code == 200, "Split page failed"
+        assert response.status_code == 200, f"Split page failed with status {response.status_code}: {response.data.decode()}"
         
         # Test edit page
         response = client.get('/edit')
-        assert response.status_code == 200, "Edit page failed"
+        assert response.status_code == 200, f"Edit page failed with status {response.status_code}: {response.data.decode()}"
         
         # Test API
         response = client.get('/api/info')

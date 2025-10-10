@@ -42,9 +42,11 @@ def inject_csrf_token():
 def csrf_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.form.get('csrf_token')
-        if not _validate_csrf_token(token):
-            return jsonify({'error': 'CSRF token validation failed'}), 403
+        # Only validate CSRF token for state-changing methods (POST, PUT, PATCH, DELETE)
+        if request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+            token = request.form.get('csrf_token')
+            if not _validate_csrf_token(token):
+                return jsonify({'error': 'CSRF token validation failed'}), 403
         return f(*args, **kwargs)
     return decorated_function
 
